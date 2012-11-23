@@ -107,10 +107,14 @@ module Plist::Emit
         Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
         output << tag('data', data)
       else
-        output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
-        data = "\n"
-        Base64::encode64(Marshal.dump(element)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
-        output << tag('data', data )
+        if element.is_a? ActiveRecord::Base
+          output << plist_node(element.attributes)
+        else
+          output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
+          data = "\n"
+          Base64::encode64(Marshal.dump(element)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
+          output << tag('data', data )
+        end
       end
     end
 
