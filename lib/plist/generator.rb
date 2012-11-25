@@ -8,99 +8,6 @@
 
 module Plist ; end
 
-
-module Plist::Node
-  include Plist::Emit
-  
-  def plist_element_type
-    case self
-    when String, Symbol
-      'string'
-
-    when Fixnum, Bignum, Integer
-      'integer'
-
-    when Float
-      'real'
-
-    else
-      raise "Don't know about this data type... something must be wrong!"
-    end
-  end
-  
-  def comment(content)
-    return "<!-- #{content} -->\n"
-  end
-  
-  def to_plist_node
-    output = ''
-      
-    case self
-    when Array
-      if self.empty?
-        output << "<array/>\n"
-      else
-        output << Plist::Emit.tag('array') {
-          self.collect {|e| e.to_plist_node}
-        }
-      end
-    when Hash
-      if self.empty?
-        output << "<dict/>\n"
-      else
-        inner_tags = []
-
-        self.keys.sort_by{|k| k.to_s }.each do |k|
-          v = self[k]
-          inner_tags << Plist::Emit.tag('key', CGI::escapeHTML(k.to_s))
-          inner_tags << v.to_plist_node
-        end
-
-        output << tag('dict') {
-          inner_tags
-        }
-      end
-    when true, false
-      output << "<#{self}/>\n"
-    when Time
-      output << Plist::Emit.tag('date', self.utc.strftime('%Y-%m-%dT%H:%M:%SZ'))
-    when Date # also catches DateTime
-      output << Plist::Emit.tag('date', self.strftime('%Y-%m-%dT%H:%M:%SZ'))
-    when String, Symbol, Fixnum, Bignum, Integer, Float
-      output << Plist::Emit.tag(self.plist_element_type, CGI::escapeHTML(self.to_s))
-    when IO, StringIO
-      self.rewind
-      contents = self.read
-      # note that apple plists are wrapped at a different length then
-      # what ruby's base64 wraps by default.
-      # I used #encode64 instead of #b64encode (which allows a length arg)
-      # because b64encode is b0rked and ignores the length arg.
-      data = "\n"
-      Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
-      output << Plist::Emit.tag('data', data)
-    else
-      output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
-      data = "\n"
-      Base64::encode64(Marshal.dump(self)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
-      output << Plist::Emit.tag('data', data )
-    end
-      
-    output
-        
-  end
-    
-end
-
-
-class Object
-  include Plist::Node
-end
-
-
-
-
-
-
 # === Create a plist
 # You can dump an object to a plist in one of two ways:
 #
@@ -226,10 +133,93 @@ module Plist::Emit
   end
 end
 
-class Array #:nodoc:
+
+module Plist::Node
   include Plist::Emit
+  
+  def plist_element_type
+    case self
+    when String, Symbol
+      'string'
+
+    when Fixnum, Bignum, Integer
+      'integer'
+
+    when Float
+      'real'
+
+    else
+      raise "Don't know about this data type... something must be wrong!"
+    end
+  end
+  
+  def comment(content)
+    return "<!-- #{content} -->\n"
+  end
+  
+  def to_plist_node
+    output = ''
+      
+    case self
+    when Array
+      if self.empty?
+        output << "<array/>\n"
+      else
+        output << Plist::Emit.tag('array') {
+          self.collect {|e| e.to_plist_node}
+        }
+      end
+    when Hash
+      if self.empty?
+        output << "<dict/>\n"
+      else
+        inner_tags = []
+
+        self.keys.sort_by{|k| k.to_s }.each do |k|
+          v = self[k]
+          inner_tags << Plist::Emit.tag('key', CGI::escapeHTML(k.to_s))
+          inner_tags << v.to_plist_node
+        end
+
+        output << tag('dict') {
+          inner_tags
+        }
+      end
+    when true, false
+      output << "<#{self}/>\n"
+    when Time
+      output << Plist::Emit.tag('date', self.utc.strftime('%Y-%m-%dT%H:%M:%SZ'))
+    when Date # also catches DateTime
+      output << Plist::Emit.tag('date', self.strftime('%Y-%m-%dT%H:%M:%SZ'))
+    when String, Symbol, Fixnum, Bignum, Integer, Float
+      output << Plist::Emit.tag(self.plist_element_type, CGI::escapeHTML(self.to_s))
+    when IO, StringIO
+      self.rewind
+      contents = self.read
+      # note that apple plists are wrapped at a different length then
+      # what ruby's base64 wraps by default.
+      # I used #encode64 instead of #b64encode (which allows a length arg)
+      # because b64encode is b0rked and ignores the length arg.
+      data = "\n"
+      Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
+      output << Plist::Emit.tag('data', data)
+    else
+      output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
+      data = "\n"
+      Base64::encode64(Marshal.dump(self)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
+      output << Plist::Emit.tag('data', data )
+    end
+      
+    output
+        
+  end
+    
 end
 
-class Hash #:nodoc:
-  include Plist::Emit
+
+class Object
+  include Plist::Node
 end
+
+
+
