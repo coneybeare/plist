@@ -8,6 +8,56 @@
 
 module Plist ; end
 
+
+module Plist::Node
+  
+  def self.included(base)
+    base.extend ClassMethods
+  end
+
+  module ClassMethods
+    def to_plist_node
+      output = ''
+      
+      case self
+      when true, false
+        output << "<#{self}/>\n"
+      when Time
+        output << tag('date', self.utc.strftime('%Y-%m-%dT%H:%M:%SZ'))
+      when Date # also catches DateTime
+        output << tag('date', self.strftime('%Y-%m-%dT%H:%M:%SZ'))
+      when String, Symbol, Fixnum, Bignum, Integer, Float
+        output << tag(element_type(self), CGI::escapeHTML(self.to_s))
+      when IO, StringIO
+        self.rewind
+        contents = self.read
+        # note that apple plists are wrapped at a different length then
+        # what ruby's base64 wraps by default.
+        # I used #encode64 instead of #b64encode (which allows a length arg)
+        # because b64encode is b0rked and ignores the length arg.
+        data = "\n"
+        Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
+        output << tag('data', data)
+      else
+        output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
+        data = "\n"
+        Base64::encode64(Marshal.dump(self)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
+        output << tag('data', data )
+      end
+      
+      output
+        
+    end
+  end
+  
+end
+
+class Class
+  include Plist::Node
+end
+
+
+
 # === Create a plist
 # You can dump an object to a plist in one of two ways:
 #
@@ -63,59 +113,7 @@ module Plist::Emit
     if element.respond_to? :to_plist_node
       output << element.to_plist_node
     else
-      case element
-      when Array
-        if element.empty?
-          output << "<array/>\n"
-        else
-          output << tag('array') {
-            element.collect {|e| plist_node(e)}
-          }
-        end
-      when Hash
-        if element.empty?
-          output << "<dict/>\n"
-        else
-          inner_tags = []
-
-          element.keys.sort_by{|k| k.to_s }.each do |k|
-            v = element[k]
-            inner_tags << tag('key', CGI::escapeHTML(k.to_s))
-            inner_tags << plist_node(v)
-          end
-
-          output << tag('dict') {
-            inner_tags
-          }
-        end
-      when true, false
-        output << "<#{element}/>\n"
-      when Time
-        output << tag('date', element.utc.strftime('%Y-%m-%dT%H:%M:%SZ'))
-      when Date # also catches DateTime
-        output << tag('date', element.strftime('%Y-%m-%dT%H:%M:%SZ'))
-      when String, Symbol, Fixnum, Bignum, Integer, Float
-        output << tag(element_type(element), CGI::escapeHTML(element.to_s))
-      when IO, StringIO
-        element.rewind
-        contents = element.read
-        # note that apple plists are wrapped at a different length then
-        # what ruby's base64 wraps by default.
-        # I used #encode64 instead of #b64encode (which allows a length arg)
-        # because b64encode is b0rked and ignores the length arg.
-        data = "\n"
-        Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
-        output << tag('data', data)
-      else
-        if element.is_a? ActiveRecord::Base
-          output << plist_node(element.attributes)
-        else
-          output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
-          data = "\n"
-          Base64::encode64(Marshal.dump(element)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
-          output << tag('data', data )
-        end
-      end
+      s
     end
 
     return output
@@ -173,6 +171,7 @@ module Plist::Emit
       raise "Don't know about this data type... something must be wrong!"
     end
   end
+  
   private
   class IndentedString #:nodoc:
     attr_accessor :indent_string
