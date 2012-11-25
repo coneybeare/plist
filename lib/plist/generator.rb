@@ -10,51 +10,94 @@ module Plist ; end
 
 
 module Plist::Node
+  include Plist::Emit
   
-  def self.included(base)
-    base.extend ClassMethods
-  end
+  def plist_element_type
+    case self
+    when String, Symbol
+      'string'
 
-  module ClassMethods
-    def to_plist_node
-      output = ''
-      
-      case self
-      when true, false
-        output << "<#{self}/>\n"
-      when Time
-        output << tag('date', self.utc.strftime('%Y-%m-%dT%H:%M:%SZ'))
-      when Date # also catches DateTime
-        output << tag('date', self.strftime('%Y-%m-%dT%H:%M:%SZ'))
-      when String, Symbol, Fixnum, Bignum, Integer, Float
-        output << tag(element_type(self), CGI::escapeHTML(self.to_s))
-      when IO, StringIO
-        self.rewind
-        contents = self.read
-        # note that apple plists are wrapped at a different length then
-        # what ruby's base64 wraps by default.
-        # I used #encode64 instead of #b64encode (which allows a length arg)
-        # because b64encode is b0rked and ignores the length arg.
-        data = "\n"
-        Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
-        output << tag('data', data)
-      else
-        output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
-        data = "\n"
-        Base64::encode64(Marshal.dump(self)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
-        output << tag('data', data )
-      end
-      
-      output
-        
+    when Fixnum, Bignum, Integer
+      'integer'
+
+    when Float
+      'real'
+
+    else
+      raise "Don't know about this data type... something must be wrong!"
     end
   end
   
+  def comment(content)
+    return "<!-- #{content} -->\n"
+  end
+  
+  def to_plist_node
+    output = ''
+      
+    case self
+    when Array
+      if self.empty?
+        output << "<array/>\n"
+      else
+        output << Plist::Emit.tag('array') {
+          self.collect {|e| e.to_plist_node}
+        }
+      end
+    when Hash
+      if self.empty?
+        output << "<dict/>\n"
+      else
+        inner_tags = []
+
+        self.keys.sort_by{|k| k.to_s }.each do |k|
+          v = self[k]
+          inner_tags << Plist::Emit.tag('key', CGI::escapeHTML(k.to_s))
+          inner_tags << v.to_plist_node
+        end
+
+        output << tag('dict') {
+          inner_tags
+        }
+      end
+    when true, false
+      output << "<#{self}/>\n"
+    when Time
+      output << Plist::Emit.tag('date', self.utc.strftime('%Y-%m-%dT%H:%M:%SZ'))
+    when Date # also catches DateTime
+      output << Plist::Emit.tag('date', self.strftime('%Y-%m-%dT%H:%M:%SZ'))
+    when String, Symbol, Fixnum, Bignum, Integer, Float
+      output << Plist::Emit.tag(self.plist_element_type, CGI::escapeHTML(self.to_s))
+    when IO, StringIO
+      self.rewind
+      contents = self.read
+      # note that apple plists are wrapped at a different length then
+      # what ruby's base64 wraps by default.
+      # I used #encode64 instead of #b64encode (which allows a length arg)
+      # because b64encode is b0rked and ignores the length arg.
+      data = "\n"
+      Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
+      output << Plist::Emit.tag('data', data)
+    else
+      output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
+      data = "\n"
+      Base64::encode64(Marshal.dump(self)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
+      output << Plist::Emit.tag('data', data )
+    end
+      
+    output
+        
+  end
+    
 end
 
-class Class
+
+class Object
   include Plist::Node
 end
+
+
+
 
 
 
@@ -92,7 +135,7 @@ module Plist::Emit
   #
   # The +envelope+ parameters dictates whether or not the resultant plist fragment is wrapped in the normal XML/plist header and footer.  Set it to false if you only want the fragment.
   def self.dump(obj, envelope = true)
-    output = plist_node(obj)
+    output = obj.to_plist_node
 
     output = wrap(output) if envelope
 
@@ -105,24 +148,7 @@ module Plist::Emit
       f.write(obj.to_plist)
     end
   end
-
-  private
-  def self.plist_node(element)
-    output = ''
-
-    if element.respond_to? :to_plist_node
-      output << element.to_plist_node
-    else
-      s
-    end
-
-    return output
-  end
-
-  def self.comment(content)
-    return "<!-- #{content} -->\n"
-  end
-
+  
   def self.tag(type, contents = '', &block)
     out = nil
 
@@ -154,22 +180,6 @@ module Plist::Emit
     output << '</plist>' + "\n"
 
     return output
-  end
-
-  def self.element_type(item)
-    case item
-    when String, Symbol
-      'string'
-
-    when Fixnum, Bignum, Integer
-      'integer'
-
-    when Float
-      'real'
-
-    else
-      raise "Don't know about this data type... something must be wrong!"
-    end
   end
   
   private
