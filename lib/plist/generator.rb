@@ -161,6 +161,8 @@ module Plist::Node
     output = ''
       
     case self
+    when ActiveRecord::Base
+      output << self.plist_attributes.to_plist_node
     when Array
       if self.empty?
         output << "<array/>\n"
@@ -204,6 +206,7 @@ module Plist::Node
       Base64::encode64(contents).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
       output << Plist::Emit.tag('data', data)
     else
+    
       output << comment( 'The <data> element below contains a Ruby object which has been serialized with Marshal.dump.' )
       data = "\n"
       Base64::encode64(Marshal.dump(self)).gsub(/\s+/, '').scan(/.{1,68}/o) { data << $& << "\n" }
@@ -213,7 +216,10 @@ module Plist::Node
     output
         
   end
-    
+  
+  def plist_attributes
+    attributes if self.is_a? ActiveRecord::Base
+  end
 end
 
 
