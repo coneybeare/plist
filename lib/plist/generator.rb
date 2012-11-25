@@ -181,7 +181,7 @@ module Plist::Node
           inner_tags << v.to_plist_node
         end
 
-        output << tag('dict') {
+        output << Plist::Emit.tag('dict') {
           inner_tags
         }
       end
