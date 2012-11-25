@@ -69,7 +69,7 @@ module Plist::Emit
       out.lower_indent
       out << "</#{type}>"
     else
-      out = "<#{type}>#{contents.to_s}</#{type}>\n"
+      out = "<#{type}>#{contents.to_s.dasherize}</#{type}>\n"
     end
 
     return out.to_s
