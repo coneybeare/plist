@@ -69,7 +69,7 @@ module Plist::Emit
       out.lower_indent
       out << "</#{type}>"
     else
-      out = "<#{type}>#{contents.to_s.dasherize}</#{type}>\n"
+      out = "<#{type}>#{contents}</#{type}>\n"
     end
 
     return out.to_s
@@ -179,7 +179,7 @@ module Plist::Node
 
         self.keys.sort_by{|k| k.to_s }.each do |k|
           v = self[k]
-          inner_tags << Plist::Emit.tag('key', CGI::escapeHTML(k.to_s))
+          inner_tags << Plist::Emit.tag('key', CGI::escapeHTML(k.to_s.dasherize))
           inner_tags << v.to_plist_node
         end
 
